@@ -22,7 +22,7 @@ TGT=/opt wget https://github.com/hedzr/docker-functions/raw/master/docker-functi
 
 
 
-## What's up
+## Documentations
 
 These shortcuts are available In `docker-functions`:
 
@@ -127,6 +127,10 @@ docker-is-exists mysql:8 || docker pull mysql:8
 ```
 
 
+
+## LICENSE
+
+MIT
 
 
 
