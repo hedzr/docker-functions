@@ -1,0 +1,134 @@
+
+#alias docker-ip="docker inspect --format '{{ .NetworkSettings.IPAddress }}'"
+alias docker-ip="docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "
+
+# echo $(docker-pid <container-id>)
+# echo $(docker-pid $(docker-cid suweia/ubuntu:latest))
+alias docker-pid="docker inspect --format '{{.State.Pid}}'"
+
+function docker-cid() {
+	CID=$(docker ps | grep -Poi "^[0-9a-f]+[ \t]+$1" | grep -Poi "^[0-9a-f]+")
+	echo $CID
+}
+
+function docker-stop-all() {
+	# https://www.mankier.com/1/docker-ps
+	# -f, --filter=[] Provide filter values. Valid filters: exited=<int> - containers with exit code of <int> label=<key> or label=<key>=<value> status=(created|restarting|running|paused|exited) name=<string> - container's name id=<ID> - container's ID
+	# http://subosito.com/docker-tips/
+	docker stop $(docker ps -a -q)
+}
+
+function docker-kill-all() {
+	docker rm -f $(docker ps -a -q)
+}
+
+function docker-rm-all() {
+	rm $* $(docker ps -a -q)
+}
+
+# $1: running-container-name
+# such as:
+#   docker-is-running some-mysql
+function docker-is-running () {
+  [ $# -eq 0 ] && echo "usage: docker-is-running <image-name|container-name>" || {
+    local name=${1:-any-mysql} && shift
+    docker ps | grep -Pi "(${name//-/\\-}\$)|(^[0-9a-f]+[ \t]+${name//-/\\-})" | grep -Poi "^[0-9a-f]+[ \t]+" | grep -Poi "^[0-9a-f]+" >/dev/null
+  }
+}
+# $1: running-container-name
+# such as:
+#   docker-is-exists some-mysql
+function docker-is-exists () {
+  [ $# -eq 0 ] && echo "usage: docker-is-exists <image-name|container-name>" || {
+    local name=${1:-any-mysql} && shift
+    docker ps -a | grep -Pi "(${name//-/\\-}\$)|(^[0-9a-f]+[ \t]+${name//-/\\-})" | grep -Poi "^[0-9a-f]+[ \t]+" | grep -Poi "^[0-9a-f]+" >/dev/null
+  }
+}
+
+function docker-rmi() {
+    for i in $@; do
+        #echo $i
+        local cid=$(docker-cid "$i")
+        [ "$cid" != "" ] && local pid=$(docker-pid "$cid")
+        [ "$pid" != "" ] && echo "Clear the stopped container: $i, $cid, $pid" && docker rm -f $pid && docker rmi -f $cid
+    done
+}
+
+function docker-rmi-none() {
+    for i in `docker-images-none-cids`; do
+        echo $i
+        #local cid=$(docker-cid "$i")
+        #[ "$cid" != "" ] && 
+        local pid=$(docker-pid "$i")
+        [ "$pid" != "" ] && echo "-------- Clean the stopped container: $i, $pid" && docker rm -f $pid
+        [ "$i"   != "" ] && echo "-------- Erase the stopped container: $i, $pid" && docker rmi -f $i
+    done
+}
+
+function docker-rmi-none-2 () {
+  for i in $(docker images | grep -Ei "<none>" | grep -Eio " ([0-9a-f]{12}) "); do
+    echo $i && local pid=$(docker inspect --format '{{.State.Pid}}' "$i")
+    [ "$pid" != "" ] && echo "-------- Clean the stopped container: $i, $pid" && docker rm -f $pid
+    [ "$i"   != "" ] && echo "-------- Erase the stopped container: $i, $pid" && docker rmi -f $i
+  done
+}
+
+function docker-images-none() {
+    docker images | grep -Ei "<none>"
+}
+
+# docker-images-none-cids: 列出未打标的容器ID
+function docker-images-none-cids() {
+    docker images | grep -Ei "<none>" | grep -Eio " ([0-9a-f]{12}) "
+}
+
+function docker-registry-list () {
+  #local REGISTRY_NAME="registry.ops.example.com"
+  #local REGISTRY_PORT=80
+  local REGISTRY_NAME=${REGISTRY_HOST:-registry.example.com}
+  local REGISTRY_PORT=${REGISTRY_PORT:-5000}
+  local REGISTRY="http://$REGISTRY_NAME:$REGISTRY_PORT/v2"
+  #local INS=" --insecure-registry=registry.ops.example.com:80"
+  local INS2=" --insecure-registry=$REGISTRY_NAME:$REGISTRY_PORT"
+  local BASIC_AUTH_STRING=${BASIC_AUTH:-admin:pub#21@example.com}
+
+  local LOGF="/tmp/pull-docker-images.log"
+
+  echo "Querying $REGISTRY/_catalog..."
+  local json=$(curl -s --user $BASIC_AUTH_STRING -X GET $REGISTRY/_catalog)
+  echo ""
+  echo ""
+  echo -n "" > $LOGF
+
+  local idx=0
+  for i in $(echo "$json" | jq '.repositories[]'); do
+    i=$(echo "$i" | tr -d '"')
+
+    [[ "$i" =~ */* ]] && local name="$i" || local name="$i"
+    
+    echo "----------------------------------------------------"
+    echo "- $i : pulling $REGISTRY/$name/tags/list"
+    
+    local json1=$(curl -s --user $BASIC_AUTH_STRING GET $REGISTRY/$name/tags/list)
+    #echo "$json1"
+    
+    for j in $(echo "$json1" | jq '.tags[]'); do
+      local tag=$(echo "$j" | tr -d '"')
+      
+      echo "- $REGISTRY_NAME:$REGISTRY_PORT/$name:$tag"
+      # echo "    ------------------------------------------------"
+      # echo "    - $j : docker pull $REGISTRY_NAME:$REGISTRY_PORT/$name:$tag";
+      # echo "# docker pull $REGISTRY_NAME:$REGISTRY_PORT/$name:$tag" >>$LOGF
+      # echo "docker pull $name:$tag" >>$LOGF
+      
+      #docker pull $REGISTRY_NAME:$REGISTRY_PORT/$name:$tag
+      #docker tag $REGISTRY_NAME:$REGISTRY_PORT/$name:$tag $name:$tag
+      #docker rmi $REGISTRY_NAME:$REGISTRY_PORT/$name:$tag 2>/dev/null
+      # break
+    done
+    
+    let idx++
+    #[ "$idx" -gt 1 ] && break
+  done
+  echo ""
+}
