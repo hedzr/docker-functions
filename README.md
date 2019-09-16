@@ -17,7 +17,7 @@ source /some/path/to/docker-functions
 The one-line script could make everything done to use me:
 
 ```bash
-TGT=/opt wget https://github.com/hedzr/docker-functions/raw/master/docker-functions -O $TGT/docker-functions && echo ". $TGT/docker-functions" >>$HOME/.bashrc
+export TGT=/opt/docker-functions; sudo touch $TGT; sudo chown $USER $TGT; wget https://github.com/hedzr/docker-functions/raw/master/docker-functions -O $TGT && echo ". $TGT" >>$HOME/.bashrc
 ```
 
 ### Compartiblities:
